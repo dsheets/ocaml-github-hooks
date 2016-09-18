@@ -1,0 +1,35 @@
+opam-version: "1.2"
+name: "github-hooks"
+version: "0.1.0"
+maintainer: "sheets@alum.mit.edu"
+authors: [
+  "David Sheets"
+  "Thomas Gazagnaire"
+]
+homepage: "https://github.com/dsheets/ocaml-github-hooks"
+bug-reports: "https://github.com/dsheets/ocaml-github-hooks/issues"
+dev-repo: "https://github.com/dsheets/ocaml-github-hooks.git"
+tags: [
+  "git"
+  "github"
+]
+build: [
+  [make]
+]
+install: [
+  [make "install"]
+]
+remove: [
+  ["ocamlfind" "remove" "github-hooks"]
+]
+depends: [
+  "ocamlfind" { build }
+  "base-unix"
+  "fmt"
+  "logs"
+  "lwt"
+  "cohttp"
+  "github"
+  "nocrypto"
+  "hex"
+]

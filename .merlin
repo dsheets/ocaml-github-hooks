@@ -1,0 +1,11 @@
+S lib
+B _build/**
+
+PKG cohttp
+PKG github
+PKG lwt
+PKG fmt
+PKG logs
+PKG cstruct
+PKG nocrypto
+PKG hex
