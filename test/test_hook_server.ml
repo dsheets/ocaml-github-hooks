@@ -224,6 +224,7 @@ let perform_test_actions user repo collaborator = Github.Monad.(
   >>= fun () ->
   Github.Stream.to_list @@ Github.Event.for_repo ~user ~repo ()
   >>= fun event_stream ->
+  print_endline "\nPolled events:\n";
   List.iter (fun ev ->
     print_endline (Github_j.string_of_event ev)
   ) event_stream;
@@ -264,6 +265,10 @@ let rec wait_for_events ~timeout server = Github.Monad.(
 )
 
 let check_hook_events received =
+  print_endline "\nReceived events:\n";
+  List.iter (fun ev ->
+    print_endline (Github_j.string_of_event_hook_constr ev)
+  ) received;
   check_events (module Check_hook_event) expected_hook_events received;
   []
 
