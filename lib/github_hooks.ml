@@ -41,7 +41,7 @@ module type HOOKS = sig
 
   val watch : t -> Repo.t -> unit Lwt.t
 
-  val events : t -> (Repo.t * Github_t.event_constr) list
+  val events : t -> (Repo.t * Github_t.event_hook_constr) list
 
   val clear : t -> unit
 
@@ -322,7 +322,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
 
   type t = {
     s: s;
-    mutable events: ((string * string) * Github_t.event_constr) list;
+    mutable events: ((string * string) * Github_t.event_hook_constr) list;
     http: HTTP.t;
     cond: unit Lwt_condition.t;
   }
@@ -341,39 +341,36 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
       Log.err (fun l -> l "parsing error: %s\n%s" e x);
       None
 
-  let event_type req =
-    let parse s = safe_parse Github_j.event_type_of_string ("\"" ^ s ^ "\"") in
-    match Header.get (Request.headers req) "x-github-event" with
-    | Some s -> parse s
-    | None   -> None
+  let event_type req = Header.get (Request.headers req) "x-github-event"
 
-  let parse_event t b: Github_t.event_constr option =
-    let ( >|= ) x f = match safe_parse x b with
-      | None   -> None
-      | Some x -> Some (f x)
-    in
-    match t with
-    | `Push        -> Github_j.push_event_of_string   >|= fun x -> `Push x
-    | `Status      -> Github_j.status_event_of_string >|= fun x -> `Status x
-    | `Delete      -> Github_j.delete_event_of_string >|= fun x -> `Delete x
-    | `Create      -> Github_j.create_event_of_string >|= fun x -> `Create x
-    | `PullRequest ->
-      Github_j.pull_request_event_of_string >|= fun x -> `PullRequest x
-    | _            -> None
-
-  let pp_event ppf = function
+  let pp_event ppf : Github_t.event_hook_constr -> _ = function
     | `Push _       -> Fmt.string ppf "push"
     | `Status _      -> Fmt.string ppf "status"
     | `Delete _      -> Fmt.string ppf "delete"
     | `Create _      -> Fmt.string ppf "create"
     | `PullRequest _ -> Fmt.string ppf "pull-request"
-    | _ -> Fmt.string ppf "unknown"
+    | `Member _      -> Fmt.string ppf "member"
+    | `Issues _      -> Fmt.string ppf "issues"
+    | `Follow        -> Fmt.string ppf "follow"
+    | `Watch _       -> Fmt.string ppf "watch"
+    | `Release _     -> Fmt.string ppf "release"
+    | `PullRequestReviewComment _ ->
+      Fmt.string ppf "pull-request-review-comment"
+    | `Fork _        -> Fmt.string ppf "fork"
+    | `Public        -> Fmt.string ppf "public"
+    | `ForkApply     -> Fmt.string ppf "fork-apply"
+    | `Download      -> Fmt.string ppf "download"
+    | `Gist          -> Fmt.string ppf "gist"
+    | `CommitComment _ -> Fmt.string ppf "commit-comment"
+    | `IssueComment _ -> Fmt.string ppf "issue-comment"
+    | `Gollum _      -> Fmt.string ppf "gollum"
+    | `Unknown (cons, _) -> Fmt.pf ppf "unknown:%s" cons
 
   let notification_handler t (user, repo) _id req body =
-    Cohttp_lwt_body.to_string body >>= fun body ->
+    Cohttp_lwt_body.to_string body >>= fun payload ->
     let e = match event_type req with
-      | None     -> None
-      | Some typ -> parse_event typ body
+      | None        -> None
+      | Some constr -> Some (Github.Hook.parse_event ~constr ~payload ())
     in
     match e with
     | Some e ->

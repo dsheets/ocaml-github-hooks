@@ -114,38 +114,86 @@ let expected_events = [
   CloseIssue 1;
 ]
 
-let check_events = List.iter2 Github_t.(function
-  | CreateRepo -> begin function
+module type CHECK_EVENT = sig
+  type push
+
+  val create_repo : [> `Create of Github_t.create_event ] -> unit
+  val create_branch : [> `Create of Github_t.create_event ] -> unit
+  val add_member : [> `Member of Github_t.member_event ] -> unit
+  val push : string -> [> `Push of push ] -> unit
+  val open_issue : int -> [> `Issues of Github_t.issues_event ] -> unit
+  val close_issue : int -> [> `Issues of Github_t.issues_event ] -> unit
+end
+
+module Check_generic_event = struct
+  open Github_t
+
+  let create_repo = function
     | `Create { create_event_ref = `Repository } -> ()
     | _ -> failwith "event stream missing create repository"
-  end
-  | CreateBranch -> begin function
+
+  let create_branch = function
     | `Create { create_event_ref = `Branch _ } -> ()
     | _ -> failwith "event stream missing create branch"
-  end
-  | AddMember -> begin function
+
+  let add_member = function
     | `Member { member_event_action = `Added } -> ()
     | _ -> failwith "event stream missing add member"
-  end
-  | Push commit -> begin function
-    | `Push { push_event_commits = [
-      { push_event_commit_message }
-    ] } when push_event_commit_message = commit -> ()
-    | _ -> failwith "event stream missing push"
-  end
-  | OpenIssue num -> begin function
+
+  let open_issue num = function
     | `Issues { issues_event_action = `Opened;
                 issues_event_issue = { issue_number; };
               } when issue_number = num -> ()
     | _ -> failwith "event stream missing open issue"
-  end
-  | CloseIssue num -> begin function
+
+  let close_issue num = function
     | `Issues { issues_event_action = `Closed;
                 issues_event_issue = { issue_number; };
               } when issue_number = num -> ()
     | _ -> failwith "event stream missing close issue"
-  end
-) expected_events
+
+end
+
+module Check_poll_event
+  : CHECK_EVENT with type push = Github_t.push_event = struct
+  type push = Github_t.push_event
+
+  include Check_generic_event
+  open Github_t
+
+  let push commit = function
+    | `Push { push_event_commits = [
+      { push_event_commit_message }
+    ] } when push_event_commit_message = commit -> ()
+    | _ -> failwith "event stream missing push"
+end
+
+module Check_hook_event
+  : CHECK_EVENT with type push = Github_t.push_event_hook = struct
+  type push = Github_t.push_event_hook
+
+  include Check_generic_event
+  open Github_t
+
+  let push commit = function
+    | `Push { push_event_hook_commits = [
+      { push_event_hook_commit_message }
+    ] } when push_event_hook_commit_message = commit -> ()
+    | _ -> failwith "event stream missing push"
+end
+
+let check_events (type push) check_mod (events : [> `Push of push ] list) =
+  let module Check_event =
+    (val check_mod : CHECK_EVENT with type push = push)
+  in
+  List.iter2 (function
+    | CreateRepo -> Check_event.create_repo
+    | CreateBranch -> Check_event.create_branch
+    | AddMember -> Check_event.add_member
+    | Push commit -> Check_event.push commit
+    | OpenIssue num -> Check_event.open_issue num
+    | CloseIssue num -> Check_event.close_issue num
+  ) expected_events events
 
 let perform_test_actions user repo collaborator = Github.Monad.(
   add_collaborator user repo collaborator
@@ -173,7 +221,7 @@ let perform_test_actions user repo collaborator = Github.Monad.(
   List.iter (fun ev ->
     print_endline (Github_j.string_of_event ev)
   ) event_stream;
-  check_events (List.rev_map (fun ev ->
+  check_events (module Check_poll_event) (List.rev_map (fun ev ->
     ev.Github_t.event_payload
   ) event_stream);
   return ()
@@ -195,7 +243,7 @@ let rec wait_for_events ~k ~timeout server = Github.Monad.(
     then begin
       Printf.eprintf "Timed out waiting for hook events\n%!";
       List.iter (fun ev ->
-        print_endline (Github_j.string_of_event_constr (snd ev))
+        print_endline (Github_j.string_of_event_hook_constr (snd ev))
       ) current_events;
       Lwt.return []
     end
@@ -209,7 +257,9 @@ let rec wait_for_events ~k ~timeout server = Github.Monad.(
   else Lwt.return current_events
 )
 
-let check_hook_events received = check_events received; []
+let check_hook_events received =
+  check_events (module Check_hook_event) received;
+  []
 
 let main () =
   if Array.length Sys.argv < 4
