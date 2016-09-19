@@ -2,6 +2,7 @@ S lib
 B _build/**
 
 PKG cohttp
+PKG conduit
 PKG github
 PKG lwt
 PKG fmt

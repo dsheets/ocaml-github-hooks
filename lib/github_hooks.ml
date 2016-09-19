@@ -21,7 +21,7 @@ module type CONFIGURATION = sig
   module Log : Logs.LOG
 
   val secret_prefix : string
-  val insecure_ssl : bool
+  val tls_config : (int -> Conduit_lwt_unix.server_tls_config) option
 end
 
 module type TIME = sig
@@ -128,7 +128,11 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
       let config =
         Cohttp_lwt_unix.Server.make ~callback:(callback server) ~conn_closed ()
       in
-      Cohttp_lwt_unix.Server.create ~mode:(`TCP (`Port port)) config
+      match Conf.tls_config with
+      | None ->
+        Cohttp_lwt_unix.Server.create ~mode:(`TCP (`Port port)) config
+      | Some tls_fun ->
+        Cohttp_lwt_unix.Server.create ~mode:(`TLS (tls_fun port)) config
 
     let service name ~routes ~handler = { name; routes; handler }
 
@@ -187,10 +191,13 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
     ]
 
     let new_hook ?(events=default_events) url secret =
+      let insecure_ssl =
+        match Conf.tls_config with None -> false | Some _ -> true
+      in
       let new_hook_config = `Web {
-        web_hook_config_url          =  Uri.to_string url;
+        web_hook_config_url          = Uri.to_string url;
         web_hook_config_content_type = "json";
-        web_hook_config_insecure_ssl = false; (* FIXME: review *)
+        web_hook_config_insecure_ssl = insecure_ssl;
         web_hook_config_secret       = Some (Cstruct.to_string secret);
       }
       in {

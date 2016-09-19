@@ -7,7 +7,7 @@ end
 module type CONFIGURATION = sig
   module Log : Logs.LOG
   val secret_prefix : string
-  val insecure_ssl : bool
+  val tls_config : (int -> Conduit_lwt_unix.server_tls_config) option
 end
 
 module type TIME = sig

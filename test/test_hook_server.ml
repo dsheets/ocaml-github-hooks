@@ -7,7 +7,12 @@ module Hooks = Github_hooks_unix.Make(struct
     module Log = (val Logs.src_log src : Logs.LOG)
 
     let secret_prefix = "test_hook_server_"
-    let insecure_ssl = false
+    let tls_config = Some (fun port ->
+      (`Crt_file_path "webhook.crt",
+       `Key_file_path "webhook.key",
+       `No_password,
+       `Port port)
+    )
   end)
 
 let add_collaborator user repo collaborator = Github.Monad.(
@@ -182,11 +187,11 @@ let rec wait_for_events ~k ~timeout server = Github.Monad.(
   if event_count < k
   then if timeout = 0
     then begin
-      Printf.eprintf "Timed out waiting for hook events\n";
+      Printf.eprintf "Timed out waiting for hook events\n%!";
       Lwt.return []
     end
     else begin
-      Printf.eprintf "Collected %d / %d events (%ds remaining)\n"
+      Printf.eprintf "Collected %d / %d events (%ds remaining)\n%!"
         event_count k timeout;
       Lwt_unix.sleep 1.
       >>= fun () ->
