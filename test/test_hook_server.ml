@@ -162,6 +162,9 @@ let perform_test_actions user repo collaborator = Github.Monad.(
   close_issue user repo issue_number
 
   >>= fun () ->
+  (* GitHub's issue events can be slow to propagate *)
+  embed (Lwt_unix.sleep 2.)
+  >>= fun () ->
   Github.Stream.to_list @@ Github.Event.for_repo ~user ~repo ()
   >>= fun event_stream ->
   List.iter (fun ev ->
