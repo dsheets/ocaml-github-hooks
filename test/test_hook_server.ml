@@ -97,6 +97,15 @@ type event_check =
   | OpenIssue of int
   | CloseIssue of int
 
+let expected_events = [
+  CreateRepo;
+  AddMember;
+  CreateBranch;
+  Push "test_push";
+  OpenIssue 1;
+  CloseIssue 1;
+]
+
 let check_events = List.iter2 Github_t.(function
   | CreateRepo -> begin function
     | `Create { create_event_ref = `Repository } -> ()
@@ -128,14 +137,7 @@ let check_events = List.iter2 Github_t.(function
               } when issue_number = num -> ()
     | _ -> failwith "event stream missing close issue"
   end
-) [
-  CreateRepo;
-  AddMember;
-  CreateBranch;
-  Push "test_push";
-  OpenIssue 1;
-  CloseIssue 1;
-]
+) expected_events
 
 let perform_test_actions user repo collaborator = Github.Monad.(
   add_collaborator user repo collaborator
@@ -170,16 +172,30 @@ let perform_test_actions user repo collaborator = Github.Monad.(
   >>~ fun () ->
   embed (remove_clone user repo)
   >>= fun () ->
-  return 5
+  return (List.length expected_events)
 )
 
-(* TODO *)
-let wait_for_events ~k ~timeout server = Github.Monad.return []
-
-(* TODO *)
-let check_hook_events events = Github.Monad.(
-  return []
+let rec wait_for_events ~k ~timeout server = Github.Monad.(
+  let open Lwt.Infix in
+  let current_events = Hooks.events server in
+  let event_count = List.length current_events in
+  if event_count < k
+  then if timeout = 0
+    then begin
+      Printf.eprintf "Timed out waiting for hook events\n";
+      Lwt.return []
+    end
+    else begin
+      Printf.eprintf "Collected %d / %d events (%ds remaining)\n"
+        event_count k timeout;
+      Lwt_unix.sleep 1.
+      >>= fun () ->
+      wait_for_events ~k ~timeout:(timeout - 1) server
+    end
+  else Lwt.return current_events
 )
+
+let check_hook_events received = check_events received; []
 
 let main () =
   if Array.length Sys.argv < 4
@@ -222,10 +238,9 @@ let main () =
         Lwt.async (fun () -> Hooks.run server);
         perform_test_actions user repo collaborator
         >>= fun k ->
-        wait_for_events ~k ~timeout:30 server
+        embed (wait_for_events ~k ~timeout:30 server)
         >>= fun events ->
-        check_hook_events events
-        >>= function
+        match check_hook_events (List.map snd events) with
         | [] -> embed (Lwt_io.printf "Everything passed.\n")
         | messages ->
           embed (
