@@ -146,6 +146,9 @@ let perform_test_actions user repo collaborator = Github.Monad.(
   >>= fun () ->
   embed (git_push user repo "another_pushed_file" "bits and atoms")
   >>= fun () ->
+  (* GitHub's push event delivery is not strictly ordered wrt issue events *)
+  embed (Lwt_unix.sleep 2.)
+  >>= fun () ->
   create_issue user repo "An issue"
     "There is an issue. It is serious. I won't tell you what it is."
   >>= fun issue_number ->
