@@ -188,6 +188,9 @@ let rec wait_for_events ~k ~timeout server = Github.Monad.(
   then if timeout = 0
     then begin
       Printf.eprintf "Timed out waiting for hook events\n%!";
+      List.iter (fun ev ->
+        print_endline (Github_j.string_of_event_constr (snd ev))
+      ) current_events;
       Lwt.return []
     end
     else begin
@@ -243,7 +246,7 @@ let main () =
         Lwt.async (fun () -> Hooks.run server);
         perform_test_actions user repo collaborator
         >>= fun k ->
-        embed (wait_for_events ~k ~timeout:30 server)
+        embed (wait_for_events ~k ~timeout:10 server)
         >>= fun events ->
         match check_hook_events (List.map snd events) with
         | [] -> embed (Lwt_io.printf "Everything passed.\n")
