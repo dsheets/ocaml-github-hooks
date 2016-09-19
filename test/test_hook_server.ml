@@ -10,6 +10,10 @@ module Hooks = Github_hooks_unix.Make(struct
     let insecure_ssl = false
   end)
 
+let add_collaborator user repo collaborator = Github.Monad.(
+  Github.Collaborator.add ~user ~repo ~name:collaborator ()
+)
+
 let check_status msg = function
   | Lwt_unix.WEXITED 0 -> Lwt.return_unit
   | _ -> Lwt.fail (Failure ("non-zero exit code process termination: "^msg))
@@ -85,37 +89,57 @@ let delete_repo user repo = Github.Monad.(
   Github.Repo.delete ~user ~repo ()
 )
 
-let check_events = Github_t.(function
-  | [] -> failwith "event stream empty"
-  | (`Create { create_event_ref = `Repository })::rest -> begin match rest with
-    | [] -> failwith "event stream empty after create repository"
-    | (`Create { create_event_ref = `Branch _ })::rest -> begin match rest with
-      | [] -> failwith "event stream empty after create branch"
-      | (`Push { push_event_commits = [
-        { push_event_commit_message = "test_push" }
-      ] })::rest -> begin match rest with
-        | [] -> failwith "event stream empty after push"
-        | (`Issues { issues_event_action = `Opened;
-                     issues_event_issue = {
-                       issue_number = 1;
-                     }; })::rest -> begin match rest with
-          | [] -> failwith "event stream empty after issue open"
-          | (`Issues { issues_event_action = `Closed;
-                       issues_event_issue = {
-                         issue_number = 1;
-                       }; })::[] -> ()
-          | _::_ -> failwith "event stream missing close issue"
-        end
-        | _::_ -> failwith "event stream missing open issue"
-      end
-      | _::_ -> failwith "event stream missing push"
-    end
-    | _::_ -> failwith "event stream missing create branch"
-  end
-  | _::_ -> failwith "event stream missing create repository"
-)
+type event_check =
+  | CreateRepo
+  | CreateBranch
+  | AddMember
+  | Push of string
+  | OpenIssue of int
+  | CloseIssue of int
 
-let perform_test_actions user repo = Github.Monad.(
+let check_events = List.iter2 Github_t.(function
+  | CreateRepo -> begin function
+    | `Create { create_event_ref = `Repository } -> ()
+    | _ -> failwith "event stream missing create repository"
+  end
+  | CreateBranch -> begin function
+    | `Create { create_event_ref = `Branch _ } -> ()
+    | _ -> failwith "event stream missing create branch"
+  end
+  | AddMember -> begin function
+    | `Member { member_event_action = `Added } -> ()
+    | _ -> failwith "event stream missing add member"
+  end
+  | Push commit -> begin function
+    | `Push { push_event_commits = [
+      { push_event_commit_message }
+    ] } when push_event_commit_message = commit -> ()
+    | _ -> failwith "event stream missing push"
+  end
+  | OpenIssue num -> begin function
+    | `Issues { issues_event_action = `Opened;
+                issues_event_issue = { issue_number; };
+              } when issue_number = num -> ()
+    | _ -> failwith "event stream missing open issue"
+  end
+  | CloseIssue num -> begin function
+    | `Issues { issues_event_action = `Closed;
+                issues_event_issue = { issue_number; };
+              } when issue_number = num -> ()
+    | _ -> failwith "event stream missing close issue"
+  end
+) [
+  CreateRepo;
+  AddMember;
+  CreateBranch;
+  Push "test_push";
+  OpenIssue 1;
+  CloseIssue 1;
+]
+
+let perform_test_actions user repo collaborator = Github.Monad.(
+  add_collaborator user repo collaborator
+  >>~ fun () ->
   embed (git_clone user repo)
   >>= fun () ->
   embed (git_push user repo "a_pushed_file" "Push that paper.")
@@ -130,12 +154,12 @@ let perform_test_actions user repo = Github.Monad.(
   >>= fun () ->
   Github.Stream.to_list @@ Github.Event.for_repo ~user ~repo ()
   >>= fun event_stream ->
-  check_events (List.rev_map (fun ev ->
-    ev.Github_t.event_payload
-  ) event_stream);
   List.iter (fun ev ->
     print_endline (Github_j.string_of_event ev)
   ) event_stream;
+  check_events (List.rev_map (fun ev ->
+    ev.Github_t.event_payload
+  ) event_stream);
   return ()
   
   >>= fun () ->
@@ -143,7 +167,7 @@ let perform_test_actions user repo = Github.Monad.(
   >>~ fun () ->
   embed (remove_clone user repo)
   >>= fun () ->
-  return 4
+  return 5
 )
 
 (* TODO *)
@@ -156,11 +180,13 @@ let check_hook_events events = Github.Monad.(
 
 let main () =
   if Array.length Sys.argv < 4
-  then failwith (sprintf "usage: %s server_uri user repo" Sys.argv.(0))
+  then failwith
+      (sprintf "usage: %s server_uri user repo collaborator" Sys.argv.(0))
   else
     let uri = Sys.argv.(1) in
     let user = Sys.argv.(2) in
     let repo = Sys.argv.(3) in
+    let collaborator = Sys.argv.(4) in
     Github_cookie_jar.init ()
     >>= fun jar ->
     Github_cookie_jar.get jar ~name:"test"
@@ -191,7 +217,7 @@ let main () =
         embed (Hooks.watch server (user, repo))
         >>= fun () ->
         Lwt.async (fun () -> Hooks.run server);
-        perform_test_actions user repo
+        perform_test_actions user repo collaborator
         >>= fun k ->
         wait_for_events ~k ~timeout:30 server
         >>= fun events ->
