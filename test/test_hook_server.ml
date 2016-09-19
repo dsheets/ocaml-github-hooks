@@ -114,6 +114,11 @@ let expected_events = [
   CloseIssue 1;
 ]
 
+let expected_hook_events = List.filter (function
+  | CreateRepo -> false
+  | _ -> true
+) expected_events
+
 module type CHECK_EVENT = sig
   type push
 
@@ -182,7 +187,8 @@ module Check_hook_event
     | _ -> failwith "event stream missing push"
 end
 
-let check_events (type push) check_mod (events : [> `Push of push ] list) =
+let check_events
+    (type push) check_mod expected (events : [> `Push of push ] list) =
   let module Check_event =
     (val check_mod : CHECK_EVENT with type push = push)
   in
@@ -193,7 +199,7 @@ let check_events (type push) check_mod (events : [> `Push of push ] list) =
     | Push commit -> Check_event.push commit
     | OpenIssue num -> Check_event.open_issue num
     | CloseIssue num -> Check_event.close_issue num
-  ) expected_events events
+  ) expected events
 
 let perform_test_actions user repo collaborator = Github.Monad.(
   add_collaborator user repo collaborator
@@ -221,23 +227,23 @@ let perform_test_actions user repo collaborator = Github.Monad.(
   List.iter (fun ev ->
     print_endline (Github_j.string_of_event ev)
   ) event_stream;
-  check_events (module Check_poll_event) (List.rev_map (fun ev ->
-    ev.Github_t.event_payload
-  ) event_stream);
+  check_events (module Check_poll_event) expected_events
+    (List.rev_map (fun ev ->
+       ev.Github_t.event_payload
+     ) event_stream);
   return ()
   
   >>= fun () ->
   delete_repo user repo
   >>~ fun () ->
   embed (remove_clone user repo)
-  >>= fun () ->
-  return (List.length expected_events)
 )
 
-let rec wait_for_events ~k ~timeout server = Github.Monad.(
+let rec wait_for_events ~timeout server = Github.Monad.(
   let open Lwt.Infix in
   let current_events = Hooks.events server in
   let event_count = List.length current_events in
+  let k = List.length expected_hook_events in
   if event_count < k
   then if timeout = 0
     then begin
@@ -252,13 +258,13 @@ let rec wait_for_events ~k ~timeout server = Github.Monad.(
         event_count k timeout;
       Lwt_unix.sleep 1.
       >>= fun () ->
-      wait_for_events ~k ~timeout:(timeout - 1) server
+      wait_for_events ~timeout:(timeout - 1) server
     end
   else Lwt.return current_events
 )
 
 let check_hook_events received =
-  check_events (module Check_hook_event) received;
+  check_events (module Check_hook_event) expected_hook_events received;
   []
 
 let main () =
@@ -301,8 +307,8 @@ let main () =
         >>= fun () ->
         Lwt.async (fun () -> Hooks.run server);
         perform_test_actions user repo collaborator
-        >>= fun k ->
-        embed (wait_for_events ~k ~timeout:10 server)
+        >>= fun () ->
+        embed (wait_for_events ~timeout:10 server)
         >>= fun events ->
         match check_hook_events (List.map snd events) with
         | [] -> embed (Lwt_io.printf "Everything passed.\n")
