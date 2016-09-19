@@ -4,6 +4,7 @@ open Lwt.Infix
 
 module Hooks = Github_hooks_unix.Make(struct
     let src = Logs.Src.create "test_hook_server"
+    let () = Logs.Src.set_level src (Some Logs.Debug)
     module Log = (val Logs.src_log src : Logs.LOG)
 
     let secret_prefix = "test_hook_server_"
