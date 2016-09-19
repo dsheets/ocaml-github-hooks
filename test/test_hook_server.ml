@@ -99,7 +99,7 @@ let delete_repo user repo = Github.Monad.(
 
 type event_check =
   | CreateRepo
-  | CreateBranch
+  | CreateBranch of string
   | AddMember
   | Push of string
   | OpenIssue of int
@@ -108,16 +108,17 @@ type event_check =
 let expected_events = [
   CreateRepo;
   AddMember;
-  CreateBranch;
+  CreateBranch "test_push";
   Push "test_push";
   OpenIssue 1;
   CloseIssue 1;
 ]
 
-let expected_hook_events = List.filter (function
-  | CreateRepo -> false
-  | _ -> true
-) expected_events
+let expected_hook_events = List.(rev (fold_left (fun acc -> function
+  | CreateRepo -> acc
+  | CreateBranch commit -> (Push commit)::(CreateBranch commit)::acc
+  | (AddMember | Push _ | OpenIssue _ | CloseIssue _) as event -> event::acc
+) [] expected_events))
 
 module type CHECK_EVENT = sig
   type push
@@ -194,7 +195,7 @@ let check_events
   in
   List.iter2 (function
     | CreateRepo -> Check_event.create_repo
-    | CreateBranch -> Check_event.create_branch
+    | CreateBranch _ -> Check_event.create_branch
     | AddMember -> Check_event.add_member
     | Push commit -> Check_event.push commit
     | OpenIssue num -> Check_event.open_issue num
