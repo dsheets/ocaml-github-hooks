@@ -297,7 +297,7 @@ let main () =
           new_repo_gitignore_template = None;
         } ()
         >>= fun test_repo ->
-        embed (Hooks.watch server (user, repo))
+        embed (Hooks.watch server ~events:[`All] (user, repo))
         >>= fun () ->
         Lwt.async (fun () -> Hooks.run server);
         perform_test_actions user repo collaborator

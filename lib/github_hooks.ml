@@ -39,7 +39,7 @@ module type HOOKS = sig
 
   val repos : t -> Repo.Set.t
 
-  val watch : t -> Repo.t -> unit Lwt.t
+  val watch : t -> ?events:Github_t.event_type list -> Repo.t -> unit Lwt.t
 
   val events : t -> (Repo.t * Github_t.event_hook_constr) list
 
@@ -274,7 +274,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
       in
       Lwt.pick [ timeout (); wait () ]
 
-    let connect ~token registry url ((user, repo), _ as r) =
+    let connect ~token ?events registry url ((user, repo), _ as r) =
       let points_to_us h =
         match web_hook_config h with
         | None   -> false
@@ -295,7 +295,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
         ) (return ()) hooks
         >>= fun () ->
         let secret = new_secret Conf.secret_prefix in
-        let hook = new_hook url secret in
+        let hook = new_hook ?events url secret in
         Log.info (fun l ->
           l "Github.Hook.create %s/%s (%s)" user repo @@ Uri.to_string url);
         Github.Hook.create ~token ~user ~repo ~hook () >>~ fun hook ->
@@ -400,7 +400,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
 
   let (++) x y = Uri.resolve "" x (Uri.of_string y)
 
-  let watch t (user,repo) =
+  let watch t ?events (user,repo) =
     if Repo.Set.mem (user,repo) t.s.repos then (
       Log.debug (fun l -> l "Already watching %s"
                     (String.concat " " (List.map (fun (user, repo) ->
@@ -418,7 +418,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
       in
       let err = github_error_str (user,repo) in
       HTTP.add_service t.http service;
-      Webhook.connect ~token:t.s.token t.s.registry uri
+      Webhook.connect ~token:t.s.token ?events t.s.registry uri
         ((user, repo), notification_handler t (user, repo))
       >|= fun endpoint -> match endpoint.Webhook.status with
       | Webhook.Indicated    -> Log.err (fun l -> l "%s wedged prerequest" err)

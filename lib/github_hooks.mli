@@ -25,7 +25,7 @@ module type HOOKS = sig
 
   val repos : t -> Repo.Set.t
 
-  val watch : t -> Repo.t -> unit Lwt.t
+  val watch : t -> ?events:Github_t.event_type list -> Repo.t -> unit Lwt.t
 
   val events : t -> (Repo.t * Github_t.event_hook_constr) list
 
