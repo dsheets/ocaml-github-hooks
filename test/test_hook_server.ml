@@ -4,6 +4,7 @@ open Lwt.Infix
 
 let src = Logs.Src.create "test_hook_server"
 let () = Logs.Src.set_level src (Some Logs.Debug)
+let () = Logs.(set_reporter (format_reporter ()))
 
 module Hooks = Github_hooks_unix.Make(struct
     module Log = (val Logs.src_log src : Logs.LOG)
