@@ -364,6 +364,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
     | `CommitComment _ -> Fmt.string ppf "commit-comment"
     | `IssueComment _ -> Fmt.string ppf "issue-comment"
     | `Gollum _      -> Fmt.string ppf "gollum"
+    | `Repository _  -> Fmt.string ppf "repository"
     | `Unknown (cons, _) -> Fmt.pf ppf "unknown:%s" cons
 
   let notification_handler t (user, repo) _id req body =
