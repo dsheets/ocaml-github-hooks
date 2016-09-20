@@ -1,3 +1,3 @@
 ## github-hooks
 
-Github API web hook listener library.
+GitHub API web hook listener library.

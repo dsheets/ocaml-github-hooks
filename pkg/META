@@ -1,4 +1,4 @@
-description = "Github API web hook listener library"
+description = "GitHub API web hook listener library"
 version = "%%VERSION%%"
 requires = "fmt logs lwt cohttp.lwt-core conduit.lwt github nocrypto hex"
 archive(byte)   = "github-hooks.cma"
@@ -7,7 +7,7 @@ plugin(byte)    = "github-hooks.cma"
 plugin(native)  = "github-hooks.cmxs"
 
 package "unix" (
- description = "Unix backend for the Github API web hook listener"
+ description = "Unix backend for the GitHub API web hook listener"
  version = "%%VERSION%%"
  requires = "github-hooks lwt.unix"
  archive(byte)   = "github-hooks-unix.cma"
