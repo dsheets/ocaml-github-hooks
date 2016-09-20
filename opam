@@ -9,20 +9,15 @@ authors: [
 homepage: "https://github.com/dsheets/ocaml-github-hooks"
 bug-reports: "https://github.com/dsheets/ocaml-github-hooks/issues"
 dev-repo: "https://github.com/dsheets/ocaml-github-hooks.git"
+doc: "https://dsheets.github.io/ocaml-github-hooks/"
+
 tags: [
   "git"
   "github"
 ]
-build: [
-  [make]
-]
-install: [
-  [make "install"]
-]
-remove: [
-  ["ocamlfind" "remove" "github-hooks"]
-]
+build: ["ocaml" "pkg/pkg.ml" "build" "--pinned" "%{pinned}%"]
 depends: [
+  "topkg" { build }
   "ocamlfind" { build }
   "base-unix"
   "fmt"

@@ -1,1 +1,0 @@
-<*.*>: package(fmt, logs, lwt, cohttp, conduit.lwt, github, nocrypto, hex)

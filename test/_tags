@@ -1,1 +1,0 @@
-<*.*>: package(logs, re, lwt.unix, github.unix, cohttp.lwt, hex, fmt)

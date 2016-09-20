@@ -1,8 +1,0 @@
-version = "0.1.0"
-description = "Github API web hook listener library"
-requires = "fmt logs lwt cohttp.lwt-core conduit.lwt github nocrypto hex"
-archive(byte) = "github_hooks.cma"
-archive(byte, plugin) = "github_hooks.cma"
-archive(native) = "github_hooks.cmxa"
-archive(native, plugin) = "github_hooks.cmxs"
-exists_if = "github_hooks.cma"
