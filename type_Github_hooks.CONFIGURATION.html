@@ -1,0 +1,17 @@
+<html><head>
+<link rel="stylesheet" href="style.css" type="text/css">
+<meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+<link rel="Start" href="index.html">
+<link title="Index of types" rel=Appendix href="index_types.html">
+<link title="Index of values" rel=Appendix href="index_values.html">
+<link title="Index of modules" rel=Appendix href="index_modules.html">
+<link title="Index of module types" rel=Appendix href="index_module_types.html">
+<link title="Github_hooks" rel="Chapter" href="Github_hooks.html">
+<link title="Github_hooks_unix" rel="Chapter" href="Github_hooks_unix.html"><title>Github_hooks.CONFIGURATION</title>
+</head>
+<body>
+<code class="code"><span class="keyword">sig</span>
+&nbsp;&nbsp;<span class="keyword">module</span>&nbsp;<span class="constructor">Log</span>&nbsp;:&nbsp;<span class="constructor">Logs</span>.<span class="constructor">LOG</span>
+&nbsp;&nbsp;<span class="keyword">val</span>&nbsp;secret_prefix&nbsp;:&nbsp;string
+&nbsp;&nbsp;<span class="keyword">val</span>&nbsp;tls_config&nbsp;:&nbsp;(int&nbsp;<span class="keywordsign">-&gt;</span>&nbsp;<span class="constructor">Conduit_lwt_unix</span>.server_tls_config)&nbsp;option
+<span class="keyword">end</span></code></body></html>
