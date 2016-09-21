@@ -10,5 +10,5 @@ let () =
   Ok [
     Pkg.mllib "lib/github-hooks.mllib";
     Pkg.mllib "unix/github-hooks-unix.mllib";
-    Pkg.test "test/test_hook_server"
+    Pkg.test ~run:false "test/test_hook_server"
   ]
