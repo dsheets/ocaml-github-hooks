@@ -196,7 +196,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
       in
       let new_hook_config = `Web {
         web_hook_config_url          = Uri.to_string url;
-        web_hook_config_content_type = "json";
+        web_hook_config_content_type = Some "json";
         web_hook_config_insecure_ssl = insecure_ssl;
         web_hook_config_secret       = Some (Cstruct.to_string secret);
       }
