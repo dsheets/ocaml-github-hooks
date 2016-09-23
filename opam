@@ -15,8 +15,9 @@ tags: [
 ]
 build: ["ocaml" "pkg/pkg.ml" "build" "--pinned" "%{pinned}%"]
 depends: [
-  "topkg" { build }
   "ocamlfind" { build }
+  "ocamlbuild" { build }
+  "topkg" { build }
   "base-unix"
   "fmt"
   "logs"
