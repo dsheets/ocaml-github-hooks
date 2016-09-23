@@ -217,7 +217,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
       | None ->
         t.status <- Unauthorized;
         Log.err (fun l ->
-          l "FAILURE: Hook registration of %s for %s/%s"
+          l "FAILURE: Hook verification of %s for %s/%s"
             (Uri.to_string t.url) t.user t.repo);
         Lwt_condition.broadcast t.update_event ();
         verification_failure
@@ -229,9 +229,6 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
           t.handler id req (`String body) >|= function
           | None   -> ()
           | Some _ -> ());
-        Log.info (fun l ->
-          l "SUCCESS: Hook registration of %s for %s/%s"
-            (Uri.to_string t.url) t.user t.repo);
         Cohttp_lwt_unix.Server.respond_string ~status:`No_content ~body:"" ()
         >|= fun x -> Some x
 
