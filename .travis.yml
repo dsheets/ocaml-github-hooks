@@ -5,7 +5,6 @@ script: bash -ex .travis-opam.sh
 env:
   - OCAML_VERSION=4.02 PACKAGE=github-hooks
   - OCAML_VERSION=4.03 PACKAGE=github-hooks
-  - OCAML_VERSION=4.04 PACKAGE=github-hooks
 os:
   - linux
   - osx
