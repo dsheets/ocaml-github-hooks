@@ -9,7 +9,7 @@ plugin(native)  = "github-hooks.cmxs"
 package "unix" (
  description = "Unix backend for the GitHub API web hook listener"
  version = "%%VERSION%%"
- requires = "github-hooks lwt.unix"
+ requires = "github.unix lwt.unix github-hooks"
  archive(byte)   = "github-hooks-unix.cma"
  archive(native) = "github-hooks-unix.cmxa"
  plugin(byte)    = "github-hooks-unix.cma"
