@@ -5,17 +5,45 @@ open Cohttp
 open Github_t
 open Lwt.Infix
 
+module Org = struct
+  type t = string
+
+  module Set = struct
+    include Set.Make(struct
+        type t = string
+        let compare = String.compare
+      end)
+    let pp ppf s = Fmt.(Dump.list string) ppf (elements s)
+  end
+end
+
 module Repo = struct
   type t = string * string
 
-  module Set = Set.Make(struct
+  module Set = struct
+    include Set.Make(struct
       type nonrec t = t
       let compare (user,repo) (user',repo') =
         match String.compare user user' with
         | 0 -> String.compare repo repo'
         | x -> x
-    end)
+      end)
+    let pp ppf s =
+      let one ppf (user, repo) = Fmt.pf ppf "%s/%s" user repo in
+      Fmt.(Dump.list one) ppf (elements s)
+  end
 end
+
+type target = [ `Repo of Repo.t | `Org of Org.t ]
+
+let pp_target ppf = function
+  | `Repo (user, repo) -> Fmt.pf ppf "repo: %s/%s" user repo
+  | `Org org -> Fmt.pf ppf "org: %s" org
+
+let apply (f: ?org:string -> ?user:string -> ?repo:string -> unit -> 'a)  =
+  function
+  | `Repo (user, repo) -> f ~user ~repo ()
+  | `Org org           -> f ~org ()
 
 module type CONFIGURATION = sig
   module Log : Logs.LOG
@@ -39,7 +67,11 @@ module type HOOKS = sig
 
   val repos : t -> Repo.Set.t
 
+  val orgs : t -> Org.Set.t
+
   val watch : t -> ?events:Github_t.event_type list -> Repo.t -> unit Lwt.t
+
+  val watch_org: t -> ?events:Github_t.event_type list -> Org.t -> unit Lwt.t
 
   val events : t -> (Repo.t * Github_t.event_hook_constr) list
 
@@ -146,8 +178,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
       id          : int64;
       url         : Uri.t;
       secret      : Cstruct.t;
-      user        : string;
-      repo        : string;
+      target      : target;
       update_event: unit Lwt_condition.t;
       token       : Github.Token.t;
       handler     : HTTP.response option HTTP.handler;
@@ -217,8 +248,8 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
       | None ->
         t.status <- Unauthorized;
         Log.err (fun l ->
-          l "FAILURE: Hook verification of %s for %s/%s"
-            (Uri.to_string t.url) t.user t.repo);
+          l "FAILURE: Hook verification of %s for %a"
+            (Uri.to_string t.url) pp_target t.target);
         Lwt_condition.broadcast t.update_event ();
         verification_failure
       | Some body ->
@@ -232,7 +263,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
         Cohttp_lwt_unix.Server.respond_string ~status:`No_content ~body:"" ()
         >|= fun x -> Some x
 
-    let of_hook ~token ((user, repo), handler) hook secret =
+    let of_hook ~token (target, handler) hook secret =
       match web_hook_config hook  with
       | None   -> assert false
       | Some w -> {
@@ -241,17 +272,14 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
           status       = Indicated;
           update_event = Lwt_condition.create ();
           last_event   = Time.min;
-          handler; token; secret; user; repo;
+          handler; token; secret; target;
         }
 
     let test ~token t =
       let open Github.Monad in
-      let f =
-        Github.Hook.test ~token ~user:t.user ~repo:t.repo
-          ~id:t.id ()
-        |> map ignore
-      in
-      run f
+      apply (Github.Hook.test ~token ~id:t.id) t.target
+      |> map ignore
+      |> run
 
     let register registry t = Hashtbl.replace registry (Uri.path t.url) t
 
@@ -271,7 +299,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
       in
       Lwt.pick [ timeout (); wait () ]
 
-    let connect ~token ?events registry url ((user, repo), _ as r) =
+    let connect ~token ?events registry url (target, _ as r) =
       let points_to_us h =
         match web_hook_config h with
         | None   -> false
@@ -279,23 +307,25 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
       in
       let create =
         let open Github.Monad in
-        Github.Hook.for_repo ~token ~user ~repo ()
+        (match target with
+         | `Repo (user, repo) -> Github.Hook.for_repo ~token ~user ~repo ()
+         | `Org org -> Github.Hook.for_org ~token ~org ())
         |> Github.Stream.to_list
         >>= fun hooks ->
         List.fold_left (fun m h ->
           m >>= fun () ->
           if not (points_to_us h) then return () else
             let id = h.hook_id in
-            Log.info (fun l -> l "Github.Hook.delete %s/%s/%Ld" user repo id);
-            Github.Hook.delete ~token ~user ~repo ~id ()
+            Log.info (fun l -> l "Github.Hook.delete %a/%Ld" pp_target target id);
+            apply (Github.Hook.delete ~token ~id) target
             |> map Github.Response.value
         ) (return ()) hooks
         >>= fun () ->
         let secret = new_secret Conf.secret_prefix in
         let hook = new_hook ?events url secret in
         Log.info (fun l ->
-          l "Github.Hook.create %s/%s (%s)" user repo @@ Uri.to_string url);
-        Github.Hook.create ~token ~user ~repo ~hook () >>~ fun hook ->
+          l "Github.Hook.create %a (%s)" pp_target target @@ Uri.to_string url);
+        apply (Github.Hook.create ~token ~hook) target >>~ fun hook ->
         of_hook ~token r hook secret
         |> return
       in
@@ -314,7 +344,8 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
     uri     : Uri.t;
     registry: (string, Webhook.t) Hashtbl.t;
     token   : Github.Token.t;
-    mutable repos: Repo.Set.t
+    mutable repos: Repo.Set.t;
+    mutable orgs : Org.Set.t;
   }
 
   type t = {
@@ -327,10 +358,11 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
   let empty token uri =
     let registry = Hashtbl.create 10 in
     let repos = Repo.Set.empty in
-    { uri; registry; token; repos }
+    let orgs = Org.Set.empty in
+    { uri; registry; token; repos; orgs }
 
-  let github_error_str (user,repo) =
-    Fmt.strf "GitHub connection for %s/%s failed:" user repo
+  let err_github target =
+    Fmt.strf "GitHub connection for %a failed:" pp_target target
 
   let safe_parse f x =
     try Some (f x)
@@ -364,16 +396,24 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
     | `Repository _  -> Fmt.string ppf "repository"
     | `Unknown (cons, _) -> Fmt.pf ppf "unknown:%s" cons
 
-  let notification_handler t (user, repo) _id req body =
+  let notification_handler t target _id req body =
     Cohttp_lwt_body.to_string body >>= fun payload ->
     let e = match event_type req with
       | None        -> None
       | Some constr -> Some (Github.Hook.parse_event ~constr ~payload ())
     in
     match e with
-    | Some e ->
+    | Some (m, e) ->
+      let open Github_t in
+      let user, repo =
+        let r = m.event_hook_metadata_repository in
+        let repo = r.repository_name in
+        let user = r.repository_owner.user_login in
+        user, repo
+      in
       Log.info (fun l ->
-        l "received webhook event for %s/%s: %a" user repo pp_event e);
+          l "received webhook event %s/%s:%Ld from %a: %a"
+            user repo m.event_hook_metadata_id pp_target target pp_event e);
       t.events <- ((user, repo), e) :: t.events;
       Lwt_condition.signal t.cond ();
       let body = Fmt.strf "Got event for %s/%s\n" user repo in
@@ -398,34 +438,41 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
 
   let (++) x y = Uri.resolve "" x (Uri.of_string y)
 
-  let watch t ?events (user,repo) =
-    if Repo.Set.mem (user,repo) t.s.repos then (
-      Log.debug (fun l -> l "Already watching %s"
-                    (String.concat " " (List.map (fun (user, repo) ->
-                       Printf.sprintf "%s/%s" user repo
-                     ) (Repo.Set.elements t.s.repos)))
+  let watch_target t ?events target =
+    let mem = match target with
+      | `Repo r -> Repo.Set.mem r t.s.repos
+      | `Org o  -> Org.Set.mem o t.s.orgs
+    in
+    if mem then (
+      Log.debug (fun l -> l "Already watching repos=%a and orgs=%a"
+                    Repo.Set.pp t.s.repos Org.Set.pp t.s.orgs
                 );
       Lwt.return_unit
     ) else
-      let uri = t.s.uri ++ Printf.sprintf "%s/%s" user repo in
+      let uri = t.s.uri ++ match target with
+        | `Repo (user, repo) -> Fmt.strf "%s/%s" user repo
+        | `Org org           -> org
+      in
       Log.info (fun l ->
         l "Connecting GitHub to callback %s\n%!" (Uri.to_string uri));
       let service =
-        let msg = Fmt.strf "GitHub listener for %s/%s" user repo in
+        let msg = Fmt.strf "GitHub listener for %a" pp_target target in
         service t.s.registry uri (HTTP.service msg)
       in
-      let err = github_error_str (user,repo) in
+      let err = err_github target in
       HTTP.add_service t.http service;
       Webhook.connect ~token:t.s.token ?events t.s.registry uri
-        ((user, repo), notification_handler t (user, repo))
+        (target, notification_handler t target)
       >|= fun endpoint -> match endpoint.Webhook.status with
       | Webhook.Indicated    -> Log.err (fun l -> l "%s wedged prerequest" err)
       | Webhook.Pending      -> Log.err (fun l -> l "%s wedged pending" err)
       | Webhook.Timeout      -> Log.err (fun l -> l "%s handshake timeout" err)
       | Webhook.Unauthorized -> Log.err (fun l -> l "%s authorization failed" err)
       | Webhook.Connected    ->
-        Log.info (fun l -> l "%s/%s connected" user repo);
-        t.s.repos <- Repo.Set.add (user, repo) t.s.repos
+        Log.info (fun l -> l "%a connected" pp_target target);
+        match target with
+        | `Repo (user, repo) -> t.s.repos <- Repo.Set.add (user, repo) t.s.repos
+        | `Org org           -> t.s.orgs <- Org.Set.add org t.s.orgs
 
   let create token uri =
     let port = match Uri.port uri with None -> 80 | Some p -> p in
@@ -435,9 +482,11 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
     { s; http; events = []; cond }
 
   let repos t = t.s.repos
+  let orgs t = t.s.orgs
   let run t = HTTP.listen t.http
   let events t = List.rev t.events
   let clear t = t.events <- []
   let wait t = Lwt_condition.wait t.cond
-
+  let watch t ?events r = watch_target t ?events (`Repo r)
+  let watch_org t ?events o = watch_target t ?events (`Org o)
 end

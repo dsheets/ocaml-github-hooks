@@ -1,3 +1,8 @@
+module Org: sig
+  type t = string
+  module Set : Set.S with type elt = t
+end
+
 module Repo : sig
   type t = string * string
 
@@ -25,7 +30,11 @@ module type HOOKS = sig
 
   val repos : t -> Repo.Set.t
 
+  val orgs : t -> Org.Set.t
+
   val watch : t -> ?events:Github_t.event_type list -> Repo.t -> unit Lwt.t
+
+  val watch_org : t -> ?events:Github_t.event_type list -> Org.t -> unit Lwt.t
 
   val events : t -> (Repo.t * Github_t.event_hook_constr) list
 
