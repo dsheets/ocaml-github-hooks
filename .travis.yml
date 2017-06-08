@@ -3,8 +3,11 @@ sudo: required
 install: wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.travis-opam.sh
 script: bash -ex .travis-opam.sh
 env:
-  - OCAML_VERSION=4.02 PACKAGE=github-hooks
-  - OCAML_VERSION=4.03 PACKAGE=github-hooks
+  global:
+  - PINS="github-hooks.dev:. github-hooks-unix.dev:."
+  matrix:
+  - OCAML_VERSION=4.02 PACKAGE=github-hooks-unix
+  - OCAML_VERSION=4.03 PACKAGE=github-hooks-unix
 os:
   - linux
   - osx
