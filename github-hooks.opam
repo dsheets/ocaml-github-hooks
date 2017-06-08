@@ -13,17 +13,17 @@ tags: [
   "git"
   "github"
 ]
-build: ["ocaml" "pkg/pkg.ml" "build" "--pinned" "%{pinned}%"]
+
+build: ["jbuilder" "build" "-p" name "-j" jobs]
+
 depends: [
-  "ocamlfind" { build }
-  "ocamlbuild" { build }
-  "topkg" { build }
-  "base-unix"
+  "jbuilder" { build }
   "fmt"
   "logs"
   "lwt"
   "cohttp"
   "github" {>= "2.0.1"}
+  "conduit"
   "nocrypto"
   "hex"
 ]

@@ -18,9 +18,8 @@ module Hooks = Github_hooks_unix.Make(struct
     )
   end)
 
-let add_collaborator user repo collaborator = Github.Monad.(
+let add_collaborator user repo collaborator =
   Github.Collaborator.add ~user ~repo ~name:collaborator ()
-)
 
 let check_status msg = function
   | Lwt_unix.WEXITED 0 -> Lwt.return_unit
@@ -31,11 +30,11 @@ let git_clone user repo =
     (Printf.sprintf "git clone git@github.com:%s/%s.git" user repo)
   >>= check_status "git clone"
 
-let remove_clone user repo =
+let remove_clone _user repo =
   Lwt_unix.system (Printf.sprintf "rm -rf \"./%s\"" repo)
   >>= check_status "rm -rf"
 
-let git_push user repo path content = Lwt.Infix.(
+let git_push _user repo path content = Lwt.Infix.(
   Lwt_unix.(openfile (repo^"/"^path) [O_WRONLY; O_CREAT] 0o600)
   >>= fun fd ->
   Lwt.catch (fun () ->
@@ -93,9 +92,8 @@ let close_issue user repo num = Github.Monad.(
   >>= fun _ -> return ()
 )
 
-let delete_repo user repo = Github.Monad.(
+let delete_repo user repo =
   Github.Repo.delete ~user ~repo ()
-)
 
 type event_check =
   | CreateRepo
@@ -135,26 +133,26 @@ module Check_generic_event = struct
   open Github_t
 
   let create_repo = function
-    | `Create { create_event_ref = `Repository } -> ()
+    | `Create { create_event_ref = `Repository; _ } -> ()
     | _ -> failwith "event stream missing create repository"
 
   let create_branch = function
-    | `Create { create_event_ref = `Branch _ } -> ()
+    | `Create { create_event_ref = `Branch _; _ } -> ()
     | _ -> failwith "event stream missing create branch"
 
   let add_member = function
-    | `Member { member_event_action = `Added } -> ()
+    | `Member { member_event_action = `Added; _ } -> ()
     | _ -> failwith "event stream missing add member"
 
   let open_issue num = function
     | `Issues { issues_event_action = `Opened;
-                issues_event_issue = { issue_number; };
+                issues_event_issue = { issue_number; _ }; _
               } when issue_number = num -> ()
     | _ -> failwith "event stream missing open issue"
 
   let close_issue num = function
     | `Issues { issues_event_action = `Closed;
-                issues_event_issue = { issue_number; };
+                issues_event_issue = { issue_number; _ }; _
               } when issue_number = num -> ()
     | _ -> failwith "event stream missing close issue"
 
@@ -169,8 +167,8 @@ module Check_poll_event
 
   let push commit = function
     | `Push { push_event_commits = [
-      { push_event_commit_message }
-    ] } when push_event_commit_message = commit -> ()
+        { push_event_commit_message; _ }
+      ]; _ } when push_event_commit_message = commit -> ()
     | _ -> failwith "event stream missing push"
 end
 
@@ -183,8 +181,8 @@ module Check_hook_event
 
   let push commit = function
     | `Push { push_event_hook_commits = [
-      { push_event_hook_commit_message }
-    ] } when push_event_hook_commit_message = commit -> ()
+        { push_event_hook_commit_message; _ }
+      ]; _ } when push_event_hook_commit_message = commit -> ()
     | _ -> failwith "event stream missing push"
 end
 
@@ -234,14 +232,14 @@ let perform_test_actions user repo collaborator = Github.Monad.(
        ev.Github_t.event_payload
      ) event_stream);
   return ()
-  
+
   >>= fun () ->
   delete_repo user repo
   >>~ fun () ->
   embed (remove_clone user repo)
 )
 
-let rec wait_for_events ~timeout server = Github.Monad.(
+let rec wait_for_events ~timeout server =
   let open Lwt.Infix in
   let current_events = Hooks.events server in
   let event_count = List.length current_events in
@@ -263,7 +261,6 @@ let rec wait_for_events ~timeout server = Github.Monad.(
       wait_for_events ~timeout:(timeout - 1) server
     end
   else Lwt.return current_events
-)
 
 let check_hook_events received =
   print_endline "\nReceived events:\n";
@@ -295,7 +292,7 @@ let main () =
       Github.(Monad.(run (
         Github.API.set_token token
         >>= fun () ->
-        Repo.create {
+        Repo.create ~repo:{
           Github_t.new_repo_name = repo;
           new_repo_homepage = "";
           new_repo_description = "A web hook test repo";
@@ -308,7 +305,7 @@ let main () =
           new_repo_license_template = None;
           new_repo_gitignore_template = None;
         } ()
-        >>= fun test_repo ->
+        >>= fun _test_repo ->
         embed (Hooks.watch server ~events:[`All] (user, repo))
         >>= fun () ->
         Lwt.async (fun () -> Hooks.run server);

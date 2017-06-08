@@ -1,13 +1,10 @@
-.PHONY: build test clean
+.PHONY: all test clean
 
-TESTS  ?= true
-OPTIONS=--tests ${TESTS}
+all:
+	jbuilder build --dev
 
-build:
-	ocaml pkg/pkg.ml build ${OPTIONS}
-
-test: build
-	ocaml pkg/pkg.ml test
+test:
+	jbuilder build --dev test/test_hook_server.exe
 
 clean:
-	ocaml pkg/pkg.ml clean
+	jbuilder clean
