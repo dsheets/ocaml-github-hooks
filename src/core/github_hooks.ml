@@ -332,12 +332,6 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
   let github_error_str (user,repo) =
     Fmt.strf "GitHub connection for %s/%s failed:" user repo
 
-  let safe_parse f x =
-    try Some (f x)
-    with Ag_oj_run.Error e ->
-      Log.err (fun l -> l "parsing error: %s\n%s" e x);
-      None
-
   let event_type req = Header.get (Request.headers req) "x-github-event"
 
   let pp_event ppf : Github_t.event_hook_constr -> _ = function

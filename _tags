@@ -1,9 +1,0 @@
-true: warn(@5@8@10@11@12@14@23@24@26@29)
-true: principal, bin_annot, safe_string, strict_sequence, debug
-
-"lib": include
-"unix": include
-
-<lib/*>: package(fmt logs lwt cohttp conduit.lwt github nocrypto hex)
-<unix/*>: package(lwt.unix)
-<test/*>: package(logs re lwt.unix github.unix cohttp.lwt hex fmt)
