@@ -22,7 +22,7 @@ depends: [
   "logs"
   "lwt"
   "cohttp"
-  "github" {>= "2.0.1"}
+  "github-unix" {>= "3.0.0"}
   "conduit"
   "nocrypto"
   "hex"
