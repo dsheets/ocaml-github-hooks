@@ -3,4 +3,5 @@
 (library
   ((name        github_hooks)
    (public_name github-hooks)
-   (libraries   (github cohttp logs fmt lwt conduit.lwt cstruct nocrypto hex))))
+   (libraries   (github-unix cohttp logs fmt lwt conduit.lwt cstruct nocrypto
+                 hex))))
