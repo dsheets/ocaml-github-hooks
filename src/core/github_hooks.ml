@@ -247,7 +247,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
     let test ~token t =
       let open Github.Monad in
       let f =
-        Github.Hook.test ~token ~user:t.user ~repo:t.repo
+        Github.Repo.Hook.test ~token ~user:t.user ~repo:t.repo
           ~id:t.id ()
         |> map ignore
       in
@@ -279,7 +279,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
       in
       let create =
         let open Github.Monad in
-        Github.Hook.for_repo ~token ~user ~repo ()
+        Github.Repo.Hook.for_repo ~token ~user ~repo ()
         |> Github.Stream.to_list
         >>= fun hooks ->
         List.fold_left (fun m h ->
@@ -287,7 +287,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
           if not (points_to_us h) then return () else
             let id = h.hook_id in
             Log.info (fun l -> l "Github.Hook.delete %s/%s/%Ld" user repo id);
-            Github.Hook.delete ~token ~user ~repo ~id ()
+            Github.Repo.Hook.delete ~token ~user ~repo ~id ()
             |> map Github.Response.value
         ) (return ()) hooks
         >>= fun () ->
@@ -295,7 +295,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
         let hook = new_hook ?events url secret in
         Log.info (fun l ->
           l "Github.Hook.create %s/%s (%s)" user repo @@ Uri.to_string url);
-        Github.Hook.create ~token ~user ~repo ~hook () >>~ fun hook ->
+        Github.Repo.Hook.create ~token ~user ~repo ~hook () >>~ fun hook ->
         of_hook ~token r hook secret
         |> return
       in
@@ -362,7 +362,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
     Cohttp_lwt_body.to_string body >>= fun payload ->
     let e = match event_type req with
       | None        -> None
-      | Some constr -> Some (Github.Hook.parse_event ~constr ~payload ())
+      | Some constr -> Some (Github.Repo.Hook.parse_event ~constr ~payload ())
     in
     match e with
     | Some e ->
