@@ -1,3 +1,9 @@
+### 0.2.0
+
+- Switch build system to jbuilder
+- Update for github 3.0
+- github-hooks findlib package is now truly independent of unix
+
 ### 0.1.2
 
 - Fix the META file (#7 from @samoht)
