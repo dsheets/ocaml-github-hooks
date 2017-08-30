@@ -14,10 +14,16 @@ tags: [
   "github"
 ]
 
-build: ["jbuilder" "build" "-p" name "-j" jobs]
+build: [
+  ["jbuilder" "subst"] {pinned}
+  ["jbuilder" "build" "-p" name "-j" jobs]
+]
 
 depends: [
-  "jbuilder" { build }
-  "github-hooks" {>= "0.2.0"}
+  "jbuilder"         { build & >= "1.0+beta9" }
+  "github-unix"      {>= "3.0.1"}
+  "conduit-lwt-unix" {>= "1.0.0"}
+  "github-hooks"     {>= "0.2.0"}
+  "cohttp-lwt-unix"  {>= "0.99.0"}
 ]
 available: [ ocaml-version >= "4.02.0" ]

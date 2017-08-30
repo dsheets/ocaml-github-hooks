@@ -17,11 +17,16 @@ module Repo = struct
     end)
 end
 
+type tls_config =
+  [ `Crt_file_path of string ] *
+  [ `Key_file_path of string ] *
+  [ `Password of bool -> string | `No_password ] *
+  [ `Port of int ]
+
 module type CONFIGURATION = sig
   module Log : Logs.LOG
-
   val secret_prefix : string
-  val tls_config : (int -> Conduit_lwt_unix.server_tls_config) option
+  val tls_config : (int -> tls_config) option
 end
 
 module type TIME = sig
@@ -32,32 +37,38 @@ end
 
 module type HOOKS = sig
   type t
-
-  val create : Github.Token.t -> Uri.t -> t
-
+  type token
+  val create : token -> Uri.t -> t
   val run : t -> unit Lwt.t
-
   val repos : t -> Repo.Set.t
-
   val watch : t -> ?events:Github_t.event_type list -> Repo.t -> unit Lwt.t
-
   val events : t -> (Repo.t * Github_t.event_hook_constr) list
-
   val clear : t -> unit
-
   val wait : t -> unit Lwt.t
 end
 
-module Make(Time : TIME)(Conf : CONFIGURATION) = struct
+module type SERVER = sig
+  include Cohttp_lwt.S.Server
+  type mode = private [> `TCP of [`Port of int] | `TLS of tls_config]
+  val create: mode -> t -> unit Lwt.t
+end
+
+module Make
+    (Time: TIME)
+    (Github: Github_s.Github)
+    (Server: SERVER)
+    (Conf: CONFIGURATION) =
+struct
   module Log = Conf.Log
+
+  type token = Github.Token.t
 
   module HTTP = struct
     type body = Cohttp_lwt_body.t
 
     type response = Response.t * body
 
-    type 'a handler =
-      Cohttp_lwt_unix.Server.conn -> Request.t -> body -> 'a Lwt.t
+    type 'a handler = Server.conn -> Request.t -> body -> 'a Lwt.t
 
     type service = {
       name   : string;
@@ -81,7 +92,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
             (Uri.path (Request.uri req))
             Fmt.(list ~sep:(unit "\n") string) routes
         in
-        Cohttp_lwt_unix.Server.respond_string ~status:`Not_found ~body ()
+        Server.respond_string ~status:`Not_found ~body ()
         >|= fun x -> Some x
       );
     }
@@ -125,14 +136,10 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
       let conn_closed (_, conn_id) =
         Log.debug (fun l -> l "conn %s closed" (Connection.to_string conn_id))
       in
-      let config =
-        Cohttp_lwt_unix.Server.make ~callback:(callback server) ~conn_closed ()
-      in
+      let config = Server.make ~callback:(callback server) ~conn_closed () in
       match Conf.tls_config with
-      | None ->
-        Cohttp_lwt_unix.Server.create ~mode:(`TCP (`Port port)) config
-      | Some tls_fun ->
-        Cohttp_lwt_unix.Server.create ~mode:(`TLS (tls_fun port)) config
+      | None         -> Server.create (`TCP (`Port port)) config
+      | Some tls_fun -> Server.create (`TLS (tls_fun port)) config
 
     let service name ~routes ~handler = { name; routes; handler }
 
@@ -163,7 +170,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
 
     let verification_failure =
       let body = "403: Forbidden (Request verification failure)" in
-      Cohttp_lwt_unix.Server.respond_string ~status:`Forbidden ~body ()
+      Server.respond_string ~status:`Forbidden ~body ()
       >|= fun x -> Some x
 
     let verify_event ~secret req body =
@@ -229,7 +236,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
           t.handler id req (`String body) >|= function
           | None   -> ()
           | Some _ -> ());
-        Cohttp_lwt_unix.Server.respond_string ~status:`No_content ~body:"" ()
+        Server.respond_string ~status:`No_content ~body:"" ()
         >|= fun x -> Some x
 
     let of_hook ~token ((user, repo), handler) hook secret =
@@ -247,7 +254,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
     let test ~token t =
       let open Github.Monad in
       let f =
-        Github.Hook.test ~token ~user:t.user ~repo:t.repo
+        Github.Repo.Hook.test ~token ~user:t.user ~repo:t.repo
           ~id:t.id ()
         |> map ignore
       in
@@ -279,7 +286,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
       in
       let create =
         let open Github.Monad in
-        Github.Hook.for_repo ~token ~user ~repo ()
+        Github.Repo.Hook.for_repo ~token ~user ~repo ()
         |> Github.Stream.to_list
         >>= fun hooks ->
         List.fold_left (fun m h ->
@@ -287,7 +294,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
           if not (points_to_us h) then return () else
             let id = h.hook_id in
             Log.info (fun l -> l "Github.Hook.delete %s/%s/%Ld" user repo id);
-            Github.Hook.delete ~token ~user ~repo ~id ()
+            Github.Repo.Hook.delete ~token ~user ~repo ~id ()
             |> map Github.Response.value
         ) (return ()) hooks
         >>= fun () ->
@@ -295,7 +302,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
         let hook = new_hook ?events url secret in
         Log.info (fun l ->
           l "Github.Hook.create %s/%s (%s)" user repo @@ Uri.to_string url);
-        Github.Hook.create ~token ~user ~repo ~hook () >>~ fun hook ->
+        Github.Repo.Hook.create ~token ~user ~repo ~hook () >>~ fun hook ->
         of_hook ~token r hook secret
         |> return
       in
@@ -362,7 +369,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
     Cohttp_lwt_body.to_string body >>= fun payload ->
     let e = match event_type req with
       | None        -> None
-      | Some constr -> Some (Github.Hook.parse_event ~constr ~payload ())
+      | Some constr -> Some (Github.Repo.Hook.parse_event ~constr ~payload ())
     in
     match e with
     | Some e ->
@@ -371,7 +378,7 @@ module Make(Time : TIME)(Conf : CONFIGURATION) = struct
       t.events <- ((user, repo), e) :: t.events;
       Lwt_condition.signal t.cond ();
       let body = Fmt.strf "Got event for %s/%s\n" user repo in
-      Cohttp_lwt_unix.Server.respond_string ~status:`OK ~body ()
+      Server.respond_string ~status:`OK ~body ()
       >|= fun x -> Some x
     | None ->
       Log.info (fun l -> l "received unknown webhook event");

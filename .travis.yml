@@ -4,10 +4,11 @@ install: wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.t
 script: bash -ex .travis-opam.sh
 env:
   global:
-  - PINS="github.dev:--dev github-unix.dev:https://github.com/mirage/ocaml-github.git  github-hooks.dev:. github-hooks-unix.dev:."
+  - PINS="github.dev:--dev github-unix.dev:--dev  github-hooks.dev:. github-hooks-unix.dev:."
   matrix:
-  - OCAML_VERSION=4.02 PACKAGE=github-hooks-unix
   - OCAML_VERSION=4.03 PACKAGE=github-hooks-unix
+  - OCAML_VERSION=4.04 PACKAGE=github-hooks-unix
+  - OCAML_VERSION=4.05 PACKAGE=github-hooks-unix
 os:
   - linux
   - osx
