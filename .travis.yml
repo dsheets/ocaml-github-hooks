@@ -6,9 +6,9 @@ env:
   global:
   - PINS="github.dev:--dev github-unix.dev:--dev  github-hooks.dev:. github-hooks-unix.dev:."
   matrix:
-  - OCAML_VERSION=4.03 PACKAGE=github-hooks-unix
-  - OCAML_VERSION=4.04 PACKAGE=github-hooks-unix
   - OCAML_VERSION=4.05 PACKAGE=github-hooks-unix
+  - OCAML_VERSION=4.06 PACKAGE=github-hooks-unix
+  - OCAML_VERSION=4.07 PACKAGE=github-hooks-unix
 os:
   - linux
   - osx
