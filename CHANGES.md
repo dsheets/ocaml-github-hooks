@@ -1,3 +1,8 @@
+### 0.4.0
+
+- Support Lwt >= 4.0.0 (@avsm)
+- Upgrade build system from jbuilder to dune (@avsm)
+
 ### 0.3.0
 
 - Support cohttp 1.0.0
