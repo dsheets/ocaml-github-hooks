@@ -15,15 +15,15 @@ tags: [
 ]
 
 build: [
-  ["jbuilder" "subst"] {pinned}
-  ["jbuilder" "build" "-p" name "-j" jobs]
+  ["dune" "subst"] {pinned}
+  ["dune" "build" "-p" name "-j" jobs]
 ]
 
 depends: [
-  "jbuilder"         { build & >= "1.0+beta9" }
+  "dune"             {build}
   "github-unix"      {>= "3.0.1"}
   "conduit-lwt-unix" {>= "1.0.0"}
-  "github-hooks"     {>= "0.2.0"}
+  "github-hooks"     {>= "0.3.0"}
   "cohttp-lwt-unix"  {>= "0.99.0"}
 ]
 available: [ ocaml-version >= "4.02.0" ]

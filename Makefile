@@ -1,10 +1,10 @@
 .PHONY: all test clean
 
 all:
-	jbuilder build --dev
+	dune build
 
 test:
-	jbuilder build --dev test/test_hook_server.exe
+	dune build test/test_hook_server.exe
 
 clean:
-	jbuilder clean
+	dune clean
