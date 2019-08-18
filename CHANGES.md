@@ -1,3 +1,7 @@
+### 0.5.0
+
+- Support conduit >= 1.5.0 (@avsm)
+
 ### 0.4.0
 
 - Support Lwt >= 4.0.0 (@avsm)

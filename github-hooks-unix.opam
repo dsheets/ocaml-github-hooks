@@ -20,10 +20,10 @@ build: [
 ]
 
 depends: [
-  "dune"             {build}
+  "dune"
   "github-unix"      {>= "3.0.1"}
-  "conduit-lwt-unix" {>= "1.0.0"}
-  "github-hooks"     {>= "0.3.0"}
+  "conduit-lwt-unix" {>= "1.5.0"}
+  "github-hooks"     {=version}
   "cohttp-lwt-unix"  {>= "0.99.0"}
 ]
 available: [ ocaml-version >= "4.02.0" ]
