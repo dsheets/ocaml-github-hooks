@@ -6,6 +6,7 @@ end
 
 module Server = struct
   include Cohttp_lwt_unix.Server
+  type tcp_config = Conduit_lwt_unix.tcp_config
   type mode = Conduit_lwt_unix.server
   let create mode t = create ~mode:(mode :> mode) t
 end

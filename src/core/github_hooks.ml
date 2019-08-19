@@ -17,7 +17,7 @@ module Repo = struct
     end)
 end
 
-type tls_config =
+type server_tls_config =
   [ `Crt_file_path of string ] *
   [ `Key_file_path of string ] *
   [ `Password of bool -> string | `No_password ] *
@@ -26,7 +26,7 @@ type tls_config =
 module type CONFIGURATION = sig
   module Log : Logs.LOG
   val secret_prefix : string
-  val tls_config : (int -> tls_config) option
+  val tls_config : (int -> server_tls_config) option
 end
 
 module type TIME = sig
@@ -49,7 +49,8 @@ end
 
 module type SERVER = sig
   include Cohttp_lwt.S.Server
-  type mode = private [> `TCP of [`Port of int] | `TLS of tls_config]
+  type tcp_config = private [> `Port of int ]
+  type mode = private [> `TCP of tcp_config | `TLS of server_tls_config]
   val create: mode -> t -> unit Lwt.t
 end
 
